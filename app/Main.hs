@@ -92,13 +92,24 @@ main = do
   confluenceUrl     <- getEnv "CONFLUENCE_URL"
   username          <- getEnv "CONFLUENCE_USER"
   password          <- getEnv "CONFLUENCE_PASSWORD"
-  throttle          <- newThrottle (argsActionLimit args) (argsActionMinDelay args) (argsActionMaxDelay args) (argsRequestBackoff args)
+  throttle          <- newThrottle (argsActionLimit args)
+                                   (argsActionMinDelay args)
+                                   (argsActionMaxDelay args)
+                                   (argsRequestBackoff args)
   putStrLn $ "Using Confluence URL: " ++ confluenceUrl
   putStrLn $ "Using user: " ++ username
-  let caseHandling = if (argsPreserveCase args) then PreserveIfContainsCapitals else TitleCase
-  let config = ConfluenceConfig username password confluenceUrl (argsPageTitle args) (argsSpaceKey args) (argsPageId args) caseHandling
+
+  let caseHandling =
+        if (argsPreserveCase args)
+        then PreserveIfContainsCapitals
+        else TitleCase
+
+  let config =
+        ConfluenceConfig username password confluenceUrl
+                         (argsPageTitle args) (argsSpaceKey args) (argsPageId args)
+                         caseHandling
+
   sync throttle config (argsSyncDirectory args)
-  return ()
 
 shortProgramDescription = [here|
 Synchronises all of the pages in the sync-directory to the given space and places them all under the specified page.

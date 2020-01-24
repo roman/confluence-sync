@@ -118,24 +118,28 @@ data SiteFile = SiteFile {
 buildSiteTree :: FilePath -> IO SiteTree
 buildSiteTree root = do
   unfoldTreeM buildTree root
-  where listDirectory :: FilePath -> IO ([ FilePath ])
-        listDirectory dir = do
-          relativeContents    <- (filter (`notElem` [".", ".."])) <$> (getDirectoryContents dir)
-          let withoutHidden    = filter (\p -> not $ "." `isPrefixOf` p) relativeContents
-          let absoluteContents = map (dir </>) withoutHidden
-          return absoluteContents
-        buildTree :: FilePath -> IO (SiteFile, [ FilePath ])
-        buildTree filePath = do
-          isDirectory <- doesDirectoryExist filePath
-          children    <- if (isDirectory) then listDirectory filePath else return []
-          return $ (SiteFile { .. }, children)
+  where
+    listDirectory :: FilePath -> IO ([ FilePath ])
+    listDirectory dir = do
+      relativeContents <- (filter (`notElem` [".", ".."])) <$> (getDirectoryContents dir)
+      let withoutHidden = filter (\p -> not $ "." `isPrefixOf` p) relativeContents
+      let absoluteContents = map (dir </>) withoutHidden
+      return absoluteContents
+
+    buildTree :: FilePath -> IO (SiteFile, [ FilePath ])
+    buildTree filePath = do
+      isDirectory <- doesDirectoryExist filePath
+      children <- if isDirectory then listDirectory filePath else return []
+      return $ (SiteFile { .. }, children)
 
 --  | True if the file represents content that can be converted to a Confluence page.
 isSiteFileAPage :: SiteFile -> Bool
-isSiteFileAPage SiteFile { filePath } = Set.member (CI.mk . takeExtension $ filePath) lowercasePageExtensions
+isSiteFileAPage SiteFile { filePath } =
+  Set.member (CI.mk . takeExtension $ filePath) lowercasePageExtensions
 
 -- | List of valid extensions for pages (all lower-case).
-lowercasePageExtensions = Set.fromList $ map CI.mk [ ".html", ".htm", ".md", ".markdown" ]
+lowercasePageExtensions =
+  Set.fromList $ map CI.mk [ ".html", ".htm", ".md", ".markdown", ".org" ]
 
 -------------------------------------------------------------------------------
 -- Page Tree.

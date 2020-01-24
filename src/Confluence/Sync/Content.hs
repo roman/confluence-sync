@@ -41,47 +41,65 @@ import           Confluence.Sync.Internal.AttachmentHash
 
 getPageAsRawHtml :: ConfluenceZipper -> IO T.Text
 getPageAsRawHtml zipper =
-  let siteFile  = label <$> (pageSource . pagePosition . label $ zipper)
-      -- Converts a Pandoc error and throws it in the IO monad.
-      handleParseError file = either (fail . (humaniseError file)) return
-      -- Takes an error and adds the file location (with error message).
-      humaniseError file err = "Failed to parse " <> (filePath file) <> " - " <> (show err)
-      -- Convert Markdown to HTML
-      -- Note that file is not used.
-      convertToMarkdown file = do
-        source <- TIO.readFile (filePath file)
-        mdResult0 <- runIO (readMarkdown def source)
-        mdResult <- handleParseError file mdResult0
-        html <-
-              runIOorExplode
-              $ writeHtml5String
-                (def {
-                  writerReferenceLinks = True
-                , writerEmailObfuscation = NoObfuscation
-                })
-                mdResult
-        return html
+  let
+    siteFile  = label <$> (pageSource . pagePosition . label $ zipper)
+
+    -- Converts a Pandoc error and throws it in the IO monad.
+    handleParseError file = either (fail . (humaniseError file)) return
+
+    -- Takes an error and adds the file location (with error message).
+    humaniseError file err = "Failed to parse " <> (filePath file) <> " - " <> (show err)
+
+    -- Convert Markdown to HTML
+    -- Note that file is not used.
+    convertToHTML reader file = do
+      source <- TIO.readFile (filePath file)
+      mdResult0 <- runIO (reader def source)
+      mdResult <- handleParseError file mdResult0
+      html <-
+            runIOorExplode
+            $ writeHtml5String
+              (def {
+                writerReferenceLinks = True
+              , writerEmailObfuscation = NoObfuscation
+              })
+              mdResult
+      return html
+
   in case siteFile of
-    -- This will occur if a directory has child pages BUT no page for itself (e.g. a README)
+    -- This will occur if a directory has child pages BUT no page for itself
+    -- (e.g. a README)
     Nothing   -> return ""
     Just file -> case (getPageType file) of
-        Just HtmlPage      -> TIO.readFile (filePath file)
         Just MarkdownPage  -> do
-          html <- convertToMarkdown file
+          html <- convertToHTML readMarkdown file
           return (wrapMarkdownHtml html)
-        Nothing            -> return ""
+        Just OrgPage -> do
+          html <- convertToHTML readOrg file
+          return (wrapMarkdownHtml html)
+        Just HtmlPage ->
+          TIO.readFile (filePath file)
+        Nothing ->
+          return ""
 
-data PageType = HtmlPage | MarkdownPage
+data PageType
+  = HtmlPage
+  | MarkdownPage
+  | OrgPage
 
 getPageType :: SiteFile -> Maybe PageType
 getPageType file =
-  if (hasA htmlExtensions) then Just HtmlPage
-    else if (hasA markdownExtensions) then Just MarkdownPage
-      else Nothing
-  where lowercaseExtension = (map toLower (takeExtension (filePath file)))
-        hasA exts = Set.member lowercaseExtension exts
-        markdownExtensions = Set.fromList [ ".md", ".markdown" ]
-        htmlExtensions = Set.fromList [ ".html", ".htm" ]
+  case "" of
+    _ | hasA htmlExtensions -> Just HtmlPage
+      | hasA markdownExtensions -> Just MarkdownPage
+      | hasA orgExtensions -> Just OrgPage
+      | otherwise -> Nothing
+  where
+    lowercaseExtension = (map toLower (takeExtension (filePath file)))
+    hasA exts = Set.member lowercaseExtension exts
+    markdownExtensions = Set.fromList [ ".md", ".markdown" ]
+    htmlExtensions = Set.fromList [ ".html", ".htm" ]
+    orgExtensions = Set.singleton ".org"
 
 
 getPageContents :: ConfluenceZipper -> [ (LocalAttachment, Attachment) ] -> IO String
